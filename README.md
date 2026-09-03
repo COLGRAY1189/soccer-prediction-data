@@ -1,66 +1,68 @@
-# soccer-prediction-ratings
+# Soccer prediction — ratings data
 
-Data-only feed for a personal soccer match-prediction app. **No application code lives here** — this
-repository exists so an installed app can fetch fresh team ratings without a server, and so its
-predictions can be reproduced exactly after the fact.
+Machine-readable ratings snapshots for a soccer prediction app. Published by a daily
+GitHub Action from a private app repo. Nothing here is written by hand.
 
-Everything here is generated. Nothing in it is edited by hand.
+**This repo holds only JSON.** No database, no archive, no binary, no Git LFS. A publish
+that would add anything else is refused by a check in the app repo before the commit is
+made.
 
 ## Layout
 
-```
-latest.json              the most recent snapshot
-snapshots/YYYY-MM-DD.json  dated snapshots, retained for 120 days
-```
+| Path | What it is |
+|---|---|
+| `latest.json` | The most recent snapshot. Read this first. |
+| `snapshots/YYYY-MM-DD.json` | One dated snapshot per day, kept for a rolling **120 days**. |
 
-`latest.json` appears after the first build runs; until then this repository is empty by design.
+Older snapshots are deleted. A fixture older than the retention window cannot be
+replayed, and the app records that as *"not covered — no snapshot"* rather than guessing.
+A gap is meant to look like a gap.
 
 ## What a snapshot contains
 
-A snapshot is a single JSON object holding team ratings **and the exact model configuration that
-produced them**:
+```jsonc
+{
+  "generatedAt": "2026-08-28T14:10:00.000Z",
+  "modelConfig": { /* every coefficient, floor, calibration knot and league list */ },
+  "poisson":      { "mu": 0.3, "gamma": 0.22 },   // 180-day fit, feeds match winner
+  "poissonGoals": { "mu": 0.31, "gamma": 0.21 },  // 365-day fit, feeds over 2.5
+  "leagueOverRate": { "eng.1": 0.55 },
+  "teams": { "359": { "elo": 1833.444, "attack": 0.591891, "...": 0 } },
+  "build": { "refreshed": ["eng.1"], "stale": [], "gateWindow": {}, "seasonsCached": 288 }
+}
+```
 
-| Field | Meaning |
-|---|---|
-| `generatedAt` | ISO timestamp the snapshot was built |
-| `modelConfig` | Model version, Elo parameters, blend weight, over-2.5 weights, calibration knots, confidence floors, and the per-market league lists |
-| `poisson` | Global scoring level and home-advantage factor, log-scale |
-| `leagueOverRate` | Recent over-2.5 rate per league |
-| `teams` | Per-team ratings, **keyed by numeric team id** |
+Roughly 128 KB per snapshot.
 
-Teams are keyed by id and never by display name. Names get re-spelled between reads, and in this
-dataset one display name (`"OH Leuven"`) maps to two genuinely different clubs — a name-keyed join
-would silently merge them.
+### `modelConfig` is duplicated in every snapshot, on purpose
 
-## Why the config travels with the ratings
+It is not redundancy to be factored out. A prediction is a pure function of
+`(snapshot, fixture)`, so a snapshot carries the entire model that produced it. That is
+what makes a pick from three months ago reproducible today, and what stops a future model
+version from quietly rewriting a past prediction. It costs about 7 KB a day.
 
-A prediction is a pure function of `(snapshot, fixture)`. Because each snapshot carries its own
-coefficients, calibration and floors, a pick made weeks ago can be re-derived exactly, using only
-information that provably predates the match — even after the app ships a newer model. Without that,
-a model update would silently rewrite the app's own past predictions, and its accuracy record would
-become fiction.
+### `teams` is keyed by ESPN competitor id, never by name
 
-That is also why dated snapshots are kept rather than only the latest one.
+Names are not identities. In the training data "OH Leuven" appears under two different
+ids. Any join, map or comparison on a display name is a bug.
 
-## Retention
+### Float precision
 
-Snapshots are pruned to a rolling **120 days**. A fixture older than that window cannot be replayed,
-and the app records it as *"not covered — no snapshot"* rather than guessing. A gap is shown as a
-gap.
+Team ratings are published rounded — elo to 3 decimal places, every rate and log-rate to
+6 — which cuts the file by 28%.
 
-These are small text files (roughly 100 KB a day). **Nothing binary, archived or database-shaped is
-ever committed here** — a previous project of mine was lost after a daily job committed a large
-binary through Git LFS until it exhausted the storage allowance, and LFS storage cannot be reclaimed
-without deleting the repository.
+Measured across 3.6 million fixtures, that moves a published probability by at most
+**4.6e-5**. The only pick it can move is one already sitting within 4.5e-7 of a decision
+floor; for context, the model's own accuracy interval is ±2.5 percentage points.
 
-## Provenance
+### `build.stale`
 
-Ratings are derived from publicly available match results, on a personal, non-commercial basis. The
-files here are computed aggregates — team strength estimates and fitted model coefficients — not a
-copy or redistribution of any source dataset.
+A league whose current season could not be refreshed is frozen at its last good ratings
+and listed here. It is still published; it is not pretended to be fresh. A league more
+than 7 days stale fails the build outright rather than shipping week-old ratings dressed
+up as current ones.
 
-## Not a prediction service
+## Licence and warranty
 
-These numbers are inputs to a personal hobby app. They are not advice of any kind, there is no
-uptime or accuracy guarantee, and the format may change without notice. The model is deliberately
-market-free: no odds are used anywhere in its construction.
+Model output, published as a record of what was predicted before kickoff. No odds, no
+expected value, no staking advice. Use at your own risk.
