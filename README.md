@@ -12,9 +12,15 @@ made.
 | Path | What it is |
 |---|---|
 | `latest.json` | The most recent snapshot. Read this first. |
-| `snapshots/YYYY-MM-DD.json` | One dated snapshot per day, kept for a rolling **120 days**. |
+| `snapshots/YYYY-MM-DD.json` | The first snapshot published on that day. Kept for a rolling **120 days**. |
+| `snapshots/YYYY-MM-DD.N.json` | Each later snapshot published the same day, N counting up from 2. |
 
-Older snapshots are deleted. A fixture older than the retention window cannot be
+**A published snapshot file is never rewritten.** It is the record of what the app showed
+before a kickoff; replacing it would make that pick replay against something the app never
+used. A republish on the same day therefore gets a new file, and a fixture replays against
+whichever snapshot was the latest one published before its kickoff.
+
+Older snapshots are deleted, a whole day at a time. A fixture older than the retention window cannot be
 replayed, and the app records that as *"not covered — no snapshot"* rather than guessing.
 A gap is meant to look like a gap.
 
